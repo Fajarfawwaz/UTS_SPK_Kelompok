@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPK Peramalan Stok - SMA, WMA, & EMA</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <!-- Chart.js untuk Grafik -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #f8fafc;
+            color: #334155;
+        }
+        .card-custom { 
+            border-radius: 16px; 
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e2e8f0;
+            background: #ffffff;
+            transition: all 0.3s ease;
+        }
+        .form-control, .form-select {
+            border-radius: 10px;
+            padding: 10px 14px;
+            border-color: #cbd5e1;
+        }
+        .form-control:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+        }
+        .btn-primary {
+            border-radius: 10px;
+            padding: 12px;
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            border: none;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+        }
+        .metric-box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            transition: transform 0.2s;
+        }
+        .metric-box:hover {
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body class="bg-light">
+
+    <div class="container py-5">
+        <header class="text-center mb-5">
+            <span class="badge bg-primary bg-opacity-10 text-primary px-3 py-2 rounded-pill mb-3 fw-semibold">SISTEM PENDUKUNG KEPUTUSAN</span>
+            <h1 class="fw-bold text-dark display-6">SPK Peramalan Stok Barang</h1>
+            <p class="text-muted">Perbandingan Metode <strong>SMA</strong>, <strong>WMA</strong>, dan <strong>EMA</strong> untuk Keputusan Pengadaan</p>
+        </header>
+
+        <div class="row g-4">
+            <!-- Kolom Input -->
+            <div class="col-lg-4">
+                <div class="card card-custom border-0">
+                    <div class="card-header bg-primary text-white py-3 rounded-top-4">
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-sliders me-2"></i>Parameter & Data</h5>
+                    </div>
+                    <div class="card-body p-4">
+                        <form id="forecastForm">
+                            <div class="mb-3">
+                                <label for="productName" class="form-label fw-semibold small text-secondary">Nama Produk</label>
+                                <input type="text" class="form-control" id="productName" value="Smartphone X" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="nPeriod" class="form-label fw-semibold small text-secondary">Periode (n Bulan untuk SMA & WMA)</label>
+                                <input type="number" class="form-control" id="nPeriod" value="3" min="1" max="12" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="alpha" class="form-label fw-semibold small text-secondary">Konstanta Smoothing (α untuk EMA)</label>
+                                <!-- Diubah menjadi step="any" agar bebas menguji nilai seperti 0.33, 0.31, 0.36, dll. -->
+                                <input type="number" class="form-control" id="alpha" value="0.33" min="0.01" max="0.99" step="any" required>
+                                <div class="form-text small">Nilai bebas antara 0 sampai 1 (contoh: 0.33, 0.31, 0.36)</div>
+                            </div>
+                            <div class="mb-4">
+                                <label for="salesData" class="form-label fw-semibold small text-secondary">Data Penjualan Bulanan (Pisahkan dengan koma)</label>
+                                <textarea class="form-control" id="salesData" rows="5" required>120, 135, 150, 145, 160, 155, 170, 185, 180, 195</textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm">Hitung Peramalan</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Kolom Hasil & Grafik -->
+            <div class="col-lg-8">
+                <div class="row g-4">
+                    <!-- Kartu Ringkasan Hasil -->
+                    <div class="col-12">
+                        <div class="card card-custom border-0">
+                            <div class="card-header bg-success text-white py-3 rounded-top-4">
+                                <h5 class="mb-0 fw-bold" id="resHeader"><i class="bi bi-check-circle-fill me-2"></i>Hasil Peramalan Periode Berikutnya</h5>
+                            </div>
+                            <div class="card-body p-4">
+                                <div class="row text-center g-3">
+                                    <div class="col-md-4">
+                                        <div class="p-3 metric-box">
+                                            <span class="text-muted d-block small fw-bold text-uppercase">SMA (Simple)</span>
+                                            <h3 id="resSMA" class="fw-bold text-primary mb-0 mt-2">-</h3>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="p-3 metric-box">
+                                            <span class="text-muted d-block small fw-bold text-uppercase">WMA (Weighted)</span>
+                                            <h3 id="resWMA" class="fw-bold text-success mb-0 mt-2">-</h3>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="p-3 metric-box">
+                                            <span class="text-muted d-block small fw-bold text-uppercase">EMA (Exponential)</span>
+                                            <h3 id="resEMA" class="fw-bold text-warning mb-0 mt-2">-</h3>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="alert alert-info border-0 bg-info bg-opacity-10 text-info mt-4 mb-0 p-3 rounded-3" role="alert">
+                                    <i class="bi bi-info-circle-fill me-2"></i><strong>Rekomendasi Keputusan SPK:</strong> <span id="resDecision">Silakan hitung data terlebih dahulu.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Grafik Chart.js -->
+                    <div class="col-12">
+                        <div class="card card-custom border-0">
+                            <div class="card-body p-4">
+                                <h5 class="card-title mb-3 fw-bold text-dark"><i class="bi bi-graph-up me-2 text-primary"></i>Grafik Tren Penjualan & Peramalan</h5>
+                                <canvas id="forecastChart" height="120"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Detail Rincian Perhitungan -->
+                    <div class="col-12">
+                        <div class="card card-custom border-0">
+                            <div class="card-header bg-secondary text-white py-3 rounded-top-4">
+                                <h5 class="mb-0 fw-bold"><i class="bi bi-journal-text me-2"></i>Rincian Perhitungan Matematis</h5>
+                            </div>
+                            <div class="card-body p-4">
+                                <div id="calcDetail" class="text-secondary small" style="line-height: 1.8;">
+                                    Belum ada kalkulasi yang dijalankan.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script Logika Perhitungan & Grafik -->
+    <script>
+        let myChart = null;
+
+        document.getElementById('forecastForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            // Ambil input
+            const productName = document.getElementById('productName').value;
+            const n = parseInt(document.getElementById('nPeriod').value);
+            const alpha = parseFloat(document.getElementById('alpha').value);
+            const rawData = document.getElementById('salesData').value;
+
+            // Parsing data array
+            const data = rawData.split(',').map(item => parseFloat(item.trim())).filter(item => !isNaN(item));
+
+            if (data.length < n) {
+                alert(`Jumlah data historis (${data.length}) kurang dari periode n (${n}) yang ditentukan untuk SMA/WMA!`);
+                return;
+            }
+
+            // --- 1. HITUNG SMA (Simple Moving Average) ---
+            const lastNData = data.slice(-n);
+            const sumSMA = lastNData.reduce((acc, val) => acc + val, 0);
+            const exactSMA = sumSMA / n;
+            const forecastSMA = Math.ceil(exactSMA);
+
+            // --- 2. HITUNG WMA (Weighted Moving Average) ---
+            let sumWMA = 0;
+            let totalWeight = 0;
+            let wmaStepsText = [];
+            for (let i = 0; i < n; i++) {
+                let weight = i + 1;
+                sumWMA += lastNData[i] * weight;
+                totalWeight += weight;
+                wmaStepsText.push(`(${lastNData[i]} × ${weight})`);
+            }
+            const exactWMA = sumWMA / totalWeight;
+            const forecastWMA = Math.ceil(exactWMA);
+
+            // --- 3. HITUNG EMA (Exponential Moving Average) ---
+            let emaValues = [data[0]];
+            let emaStepsLog = [`<strong>Bulan 1 (Inisialisasi):</strong> EMA₁ = Data Aktual Bulan 1 = ${data[0]}`];
+            for (let i = 1; i < data.length; i++) {
+                let prevEma = emaValues[i - 1];
+                let currentActual = data[i];
+                let nextEma = alpha * currentActual + (1 - alpha) * prevEma;
+                emaValues.push(nextEma);
+                if (i >= data.length - 3 || i === 1) { 
+                    emaStepsLog.push(`<strong>Bulan ${i + 1}:</strong> ${alpha} × ${currentActual} + (1 - ${alpha}) × ${prevEma.toFixed(2)} = <strong>${nextEma.toFixed(2)}</strong>`);
+                }
+            }
+            const exactEMA = emaValues[emaValues.length - 1];
+            const forecastEMA = Math.ceil(exactEMA);
+
+            // Tampilkan hasil ke HTML
+            document.getElementById('resHeader').innerHTML = `<i class="bi bi-check-circle-fill me-2"></i>Hasil Peramalan untuk: ${productName}`;
+            document.getElementById('resSMA').innerText = `${forecastSMA} Unit`;
+            document.getElementById('resWMA').innerText = `${forecastWMA} Unit`;
+            document.getElementById('resEMA').innerText = `${forecastEMA} Unit`;
+
+            const avgDecision = Math.ceil((forecastSMA + forecastWMA + forecastEMA) / 3);
+            document.getElementById('resDecision').innerHTML = `Berdasarkan perbandingan 3 metode, manajemen disarankan melakukan pengadaan stok sebesar <strong>${avgDecision} unit</strong> (titik tengah rata-rata metode SMA, WMA, dan EMA) untuk meminimalkan risiko overstock maupun out-of-stock.`;
+
+            // Susun Rincian Perhitungan Matematis
+            let detailHTML = `<div class="p-3 bg-light rounded border mb-3">`;
+            detailHTML += `<h6 class="fw-bold text-primary mb-2">1. Simple Moving Average (SMA-${n})</h6>`;
+            detailHTML += `Metode ini meratakan data penjualan dari <strong>${n} bulan terakhir</strong> secara merata.<br>`;
+            detailHTML += `• Data yang digunakan: <strong>[${lastNData.join(', ')}]</strong><br>`;
+            detailHTML += `• Penjumlahan total: ${lastNData.join(' + ')} = <strong>${sumSMA}</strong><br>`;
+            detailHTML += `• Perhitungan: ${sumSMA} ÷ ${n} = <strong>${exactSMA.toFixed(2)}</strong><br>`;
+            detailHTML += `• Pembulatan ke atas: <span class="badge bg-primary">${forecastSMA} Unit</span>`;
+            detailHTML += `</div>`;
+
+            detailHTML += `<div class="p-3 bg-light rounded border mb-3">`;
+            detailHTML += `<h6 class="fw-bold text-success mb-2">2. Weighted Moving Average (WMA-${n})</h6>`;
+            detailHTML += `Metode ini memberikan bobot progresif pada bulan terbaru.<br>`;
+            detailHTML += `• Penjabaran Perkalian Bobot: ${wmaStepsText.join(' + ')} = <strong>${sumWMA}</strong><br>`;
+            detailHTML += `• Total Bobot (Penyebut): 1 + 2 + ... + ${n} = <strong>${totalWeight}</strong><br>`;
+            detailHTML += `• Perhitungan: ${sumWMA} ÷ ${totalWeight} = <strong>${exactWMA.toFixed(2)}</strong><br>`;
+            detailHTML += `• Pembulatan ke atas: <span class="badge bg-success">${forecastWMA} Unit</span>`;
+            detailHTML += `</div>`;
+
+            detailHTML += `<div class="p-3 bg-light rounded border">`;
+            detailHTML += `<h6 class="fw-bold text-dark mb-2">3. Exponential Moving Average (EMA, α = ${alpha})</h6>`;
+            detailHTML += `Metode pemulusan eksponensial dengan konstanta smoothing α = ${alpha} dari seluruh riwayat data.<br>`;
+            detailHTML += `• Rumus Iterasi: $\\text{EMA}_{t} = \\alpha \\times \\text{Aktual}_{t} + (1 - \\alpha) \\times \\text{EMA}_{t-1}$<br>`;
+            detailHTML += `• Ringkasan Proses Iterasi:<br><div class="ps-3 border-start border-3 border-warning mt-1 text-muted small">` + emaStepsLog.join('<br>') + `</div><br>`;
+            detailHTML += `• Nilai Peramalan Akhir (EMA Terakhir): <strong>${exactEMA.toFixed(2)}</strong><br>`;
+            detailHTML += `• Pembulatan ke atas: <span class="badge bg-warning text-dark">${forecastEMA} Unit</span>`;
+            detailHTML += `</div>`;
+            
+            document.getElementById('calcDetail').innerHTML = detailHTML;
+
+            // Render Grafik Chart.js
+            updateChart(data, forecastSMA, forecastWMA, forecastEMA);
+        });
+
+        function updateChart(historicalData, fSMA, fWMA, fEMA) {
+            const ctx = document.getElementById('forecastChart').getContext('2d');
+            
+            let labels = historicalData.map((_, i) => `Bulan ${i + 1}`);
+            labels.push(`Bulan ${historicalData.length + 1} (Forecast)`);
+
+            let actualChartData = [...historicalData, null];
+            let fSMACoord = Array(historicalData.length).fill(null).concat([fSMA]);
+            let fWMACoord = Array(historicalData.length).fill(null).concat([fWMA]);
+            let fEMACoord = Array(historicalData.length).fill(null).concat([fEMA]);
+
+            if (myChart) {
+                myChart.destroy();
+            }
+
+            myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Penjualan Aktual',
+                            data: actualChartData,
+                            borderColor: 'rgba(108, 117, 125, 1)',
+                            backgroundColor: 'rgba(108, 117, 125, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.1
+                        },
+                        {
+                            label: 'Forecast SMA',
+                            data: fSMACoord,
+                            borderColor: 'rgba(13, 110, 253, 1)',
+                            backgroundColor: 'transparent',
+                            borderDash: [5, 5],
+                            borderWidth: 2,
+                            pointRadius: 6
+                        },
+                        {
+                            label: 'Forecast WMA',
+                            data: fWMACoord,
+                            borderColor: 'rgba(25, 135, 84, 1)',
+                            backgroundColor: 'transparent',
+                            borderDash: [5, 5],
+                            borderWidth: 2,
+                            pointRadius: 6
+                        },
+                        {
+                            label: 'Forecast EMA',
+                            data: fEMACoord,
+                            borderColor: 'rgba(255, 193, 7, 1)',
+                            backgroundColor: 'transparent',
+                            borderDash: [5, 5],
+                            borderWidth: 2,
+                            pointRadius: 6
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'top' }
+                    }
+                }
+            });
+        }
+
+        window.onload = function() {
+            document.getElementById('forecastForm').dispatchEvent(new Event('submit'));
+        };
+    </script>
+</body>
+</html>
